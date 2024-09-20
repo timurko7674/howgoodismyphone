@@ -62,6 +62,7 @@
         <option value="easy">Easy (Low number of objects)</option>
         <option value="medium">Medium (Moderate number of objects)</option>
         <option value="hard">Hard (High number of objects)</option>
+        <option value="superhard">Super Hard (Massive number of objects)</option>
         <option value="custom">Custom (Define your own settings)</option>
       </select>
     </div>
@@ -80,6 +81,9 @@
         <label for="customSmoke">Number of smoke particles:</label>
         <input type="number" id="customSmoke" min="0" value="0">
       </div>
+
+      <label for="customTime">Test duration (minimum 10 seconds):</label>
+      <input type="number" id="customTime" min="10" value="10">
     </div>
 
     <button id="startBtn">Start Test</button>
@@ -99,7 +103,7 @@
     let cubes = [];
     let smokeParticles = [];
     let fpsMeter, maxFPS = 0;
-    let testDuration = 60000; // 60 seconds
+    let testDuration = 60000; // 60 seconds by default
     let cubeRenderTime, testStartTime, timeToRenderComplete = 0;
     let testRunning = false, cubesRendered = 0;
     let startCubeRenderTime;
@@ -114,6 +118,7 @@
       const complexity = document.getElementById('complexity').value;
       const customCubes = parseInt(document.getElementById('customCubes').value, 10);
       const customSmoke = parseInt(document.getElementById('customSmoke').value, 10);
+      const customTime = Math.max(parseInt(document.getElementById('customTime').value, 10), 10); // Ensure minimum of 10 seconds
       const cubeChecked = document.getElementById('cubeCheckbox').checked;
       const smokeChecked = document.getElementById('smokeCheckbox').checked;
 
@@ -129,6 +134,8 @@
       }
 
       document.getElementById('warnings').style.display = 'none';
+
+      testDuration = customTime * 1000; // Set custom time duration in ms
 
       startTest(device, complexity, customCubes, customSmoke, cubeChecked, smokeChecked);
     });
@@ -176,6 +183,9 @@
         numCubes = 200;
       } else if (complexity === 'hard') {
         numCubes = 500;
+      } else if (complexity === 'superhard') {
+        numCubes = 1000;
+        numSmoke = 500;
       } else if (complexity === 'custom') {
         if (cubeChecked) {
           numCubes = customCubes;
@@ -199,32 +209,38 @@
           const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
           const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
           const cube = new THREE.Mesh(geometry, material);
-          cube.position.x = (Math.random() - 0.5) * 20;
-          cube.position.y = (Math.random() - 0.5) * 20;
-          cube.position.z = (Math.random() - 0.5) * 20;
-
+          cube.position.x = (Math.random() - 0.5) * 10;
+          cube.position.y = (Math.random() - 0.5) * 10;
+          cube.position.z = (Math.random() - 0.5) * 10;
           scene.add(cube);
           cubes.push(cube);
+
+          // Spinning effect
+          cube.rotationSpeed = Math.random() * 0.05 + 0.01;
           cubesRendered++;
 
+          // Update the UI
           document.getElementById('cubeCountDisplay').innerText = `Cubes: ${cubesRendered}`;
-        }
-
-        if (cubesRendered === numCubes) {
+        } else {
           clearInterval(cubeInterval);
-
-          cubeRenderTime = Date.now();
-          timeToRenderComplete = cubeRenderTime - startCubeRenderTime;
-          document.getElementById('timeToRender').innerText = `Time to Render Cubes: ${timeToRenderComplete} ms`;
-
-          startFPSMeter(); // Start tracking FPS after cube rendering is complete
+          cubeRenderTime = Date.now() - startCubeRenderTime;
+          document.getElementById('timeToRender').innerText = `Time to Render Cubes: ${cubeRenderTime} ms`;
+          setTimeout(startFPSMeter, 10000); // Wait for 10 seconds before starting the FPS test
         }
       }, 10);
     }
 
     function createSmoke(numSmoke) {
-      // Placeholder: Add code to generate smoke particles if enabled
-      // For simplicity, you can make smoke basic spheres or other shapes
+      for (let i = 0; i < numSmoke; i++) {
+        const geometry = new THREE.SphereGeometry(0.2, 32, 32);
+        const material = new THREE.MeshBasicMaterial({ color: 0x808080, opacity: 0.5, transparent: true });
+        const smoke = new THREE.Mesh(geometry, material);
+        smoke.position.x = (Math.random() - 0.5) * 10;
+        smoke.position.y = (Math.random() - 0.5) * 10;
+        smoke.position.z = (Math.random() - 0.5) * 10;
+        scene.add(smoke);
+        smokeParticles.push(smoke);
+      }
     }
 
     function startFPSMeter() {
@@ -235,6 +251,7 @@
       renderer.setAnimationLoop(() => {
         if (testRunning) {
           renderScene();
+          updateCubes();  // Spin the cubes
           const fps = fpsMeter.getFPS();
           if (fps > maxFPS) {
             maxFPS = fps;
@@ -250,6 +267,13 @@
 
     function renderScene() {
       renderer.render(scene, camera);
+    }
+
+    function updateCubes() {
+      cubes.forEach(cube => {
+        cube.rotation.x += cube.rotationSpeed;
+        cube.rotation.y += cube.rotationSpeed;
+      });
     }
 
     function endTest() {
