@@ -28,13 +28,17 @@
       text-align: center;
     }
 
-    select, button {
+    select, button, input {
       padding: 10px;
       font-size: 16px;
     }
 
     .options {
       margin-bottom: 10px;
+    }
+
+    #cubeAmount {
+      display: none;
     }
   </style>
 </head>
@@ -57,11 +61,18 @@
         <option value="easy">Easy (Low number of objects)</option>
         <option value="medium">Medium (Moderate number of objects)</option>
         <option value="hard">Hard (High number of objects)</option>
+        <option value="superHard">Super Hard (Custom cubes and smoke)</option>
       </select>
+    </div>
+
+    <div class="options" id="cubeAmount">
+      <label for="customCubes">Enter number of cubes:</label>
+      <input type="number" id="customCubes" min="100" max="1000" value="300">
     </div>
     
     <button id="startBtn">Start Test</button>
     <p id="fpsDisplay">FPS: 0</p>
+    <p id="result" style="font-weight: bold;"></p>
   </div>
 
   <canvas id="testCanvas"></canvas>
@@ -71,20 +82,35 @@
   <script>
     let scene, camera, renderer;
     let cubes = [];
-    let fpsMeter;
-    
+    let smokeParticles = [];
+    let fpsMeter, maxFPS = 0;
+    let testDuration = 60000; // 60 seconds
+    let testStartTime;
+    let testRunning = false;
+
+    document.getElementById('complexity').addEventListener('change', function() {
+      const complexity = document.getElementById('complexity').value;
+      document.getElementById('cubeAmount').style.display = (complexity === 'superHard') ? 'block' : 'none';
+    });
+
     document.getElementById('startBtn').addEventListener('click', function() {
       const device = document.getElementById('device').value;
       const complexity = document.getElementById('complexity').value;
-      startTest(device, complexity);
+      const customCubes = parseInt(document.getElementById('customCubes').value, 10);
+
+      startTest(device, complexity, customCubes);
     });
 
-    function startTest(device, complexity) {
+    function startTest(device, complexity, customCubes) {
       // Clear the scene if already running
       if (scene) {
         cubes.forEach(cube => scene.remove(cube));
+        smokeParticles.forEach(smoke => scene.remove(smoke));
         cubes = [];
+        smokeParticles = [];
       }
+
+      document.getElementById('result').innerText = '';
 
       // Create the scene
       scene = new THREE.Scene();
@@ -99,19 +125,22 @@
       } else {
         camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
       }
-      
+
       // Setup renderer
       renderer = new THREE.WebGLRenderer({ canvas });
       renderer.setSize(window.innerWidth / 1.5, window.innerHeight / 1.5);
-      
+
       // Create cubes based on complexity
       let numObjects;
       if (complexity === 'easy') {
         numObjects = 50;
       } else if (complexity === 'medium') {
         numObjects = 200;
-      } else {
+      } else if (complexity === 'hard') {
         numObjects = 500;
+      } else if (complexity === 'superHard') {
+        numObjects = customCubes;
+        createSmoke();  // Add smoke effect in Super Hard mode
       }
 
       // Generate random cubes
@@ -132,12 +161,33 @@
 
       // Initialize FPS meter
       fpsMeter = new FPSMeter();
+      maxFPS = 0;
 
-      // Start rendering loop
+      // Record test start time and begin animation loop
+      testStartTime = Date.now();
+      testRunning = true;
       animate();
     }
 
+    function createSmoke() {
+      const smokeTexture = new THREE.TextureLoader().load('https://threejsfundamentals.org/threejs/resources/images/smoke.png');
+      const smokeMaterial = new THREE.SpriteMaterial({ map: smokeTexture });
+
+      for (let i = 0; i < 100; i++) {
+        const smoke = new THREE.Sprite(smokeMaterial);
+        smoke.position.x = (Math.random() - 0.5) * 20;
+        smoke.position.y = (Math.random() - 0.5) * 20;
+        smoke.position.z = (Math.random() - 0.5) * 20;
+        smoke.scale.set(3, 3, 3);
+
+        scene.add(smoke);
+        smokeParticles.push(smoke);
+      }
+    }
+
     function animate() {
+      if (!testRunning) return;
+
       requestAnimationFrame(animate);
 
       // Rotate each cube
@@ -152,6 +202,17 @@
       // Calculate and display FPS
       const fps = fpsMeter.getFPS();
       document.getElementById('fpsDisplay').innerText = 'FPS: ' + fps;
+      if (fps > maxFPS) maxFPS = fps;
+
+      // Check if test duration has passed
+      if (Date.now() - testStartTime >= testDuration) {
+        endTest();
+      }
+    }
+
+    function endTest() {
+      testRunning = false;
+      document.getElementById('result').innerText = 'Test Complete. Highest FPS: ' + maxFPS;
     }
   </script>
 </body>
