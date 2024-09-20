@@ -71,8 +71,10 @@
     </div>
     
     <button id="startBtn">Start Test</button>
+    <p id="cubeCountDisplay">Cubes: 0</p>
     <p id="fpsDisplay">FPS: 0</p>
     <p id="result" style="font-weight: bold;"></p>
+    <p id="timeToRender">Time to Render Cubes: 0 ms</p>
   </div>
 
   <canvas id="testCanvas"></canvas>
@@ -85,8 +87,9 @@
     let smokeParticles = [];
     let fpsMeter, maxFPS = 0;
     let testDuration = 60000; // 60 seconds
-    let testStartTime;
-    let testRunning = false;
+    let cubeRenderTime, testStartTime, timeToRenderComplete = 0;
+    let testRunning = false, cubesRendered = 0;
+    let startCubeRenderTime;
 
     document.getElementById('complexity').addEventListener('change', function() {
       const complexity = document.getElementById('complexity').value;
@@ -102,7 +105,7 @@
     });
 
     function startTest(device, complexity, customCubes) {
-      // Clear the scene if already running
+      // Clear previous scene and cubes
       if (scene) {
         cubes.forEach(cube => scene.remove(cube));
         smokeParticles.forEach(smoke => scene.remove(smoke));
@@ -111,12 +114,17 @@
       }
 
       document.getElementById('result').innerText = '';
+      document.getElementById('cubeCountDisplay').innerText = 'Cubes: 0';
+      document.getElementById('fpsDisplay').innerText = 'FPS: 0';
+      document.getElementById('timeToRender').innerText = '';
+
+      cubesRendered = 0;
 
       // Create the scene
       scene = new THREE.Scene();
       const canvas = document.getElementById('testCanvas');
 
-      // Create the camera based on the selected device
+      // Camera setup based on device type
       let aspect = window.innerWidth / window.innerHeight;
       if (device === 'phone') {
         camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
@@ -126,11 +134,11 @@
         camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
       }
 
-      // Setup renderer
+      // Renderer setup
       renderer = new THREE.WebGLRenderer({ canvas });
       renderer.setSize(window.innerWidth / 1.5, window.innerHeight / 1.5);
 
-      // Create cubes based on complexity
+      // Select number of objects based on complexity
       let numObjects;
       if (complexity === 'easy') {
         numObjects = 50;
@@ -140,33 +148,52 @@
         numObjects = 500;
       } else if (complexity === 'superHard') {
         numObjects = customCubes;
-        createSmoke();  // Add smoke effect in Super Hard mode
+        createSmoke();  // Add smoke in Super Hard mode
       }
 
-      // Generate random cubes
-      for (let i = 0; i < numObjects; i++) {
-        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
-        const cube = new THREE.Mesh(geometry, material);
+      startCubeRenderTime = Date.now();
 
-        cube.position.x = (Math.random() - 0.5) * 20;
-        cube.position.y = (Math.random() - 0.5) * 20;
-        cube.position.z = (Math.random() - 0.5) * 20;
+      // Generate cubes
+      generateCubes(numObjects, complexity);
+    }
 
-        scene.add(cube);
-        cubes.push(cube);
-      }
+    function generateCubes(numObjects, complexity) {
+      const cubeInterval = setInterval(() => {
+        if (cubesRendered < numObjects) {
+          // Create one cube at a time
+          const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+          const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.x = (Math.random() - 0.5) * 20;
+          cube.position.y = (Math.random() - 0.5) * 20;
+          cube.position.z = (Math.random() - 0.5) * 20;
 
-      camera.position.z = 10;
+          scene.add(cube);
+          cubes.push(cube);
+          cubesRendered++;
 
-      // Initialize FPS meter
+          document.getElementById('cubeCountDisplay').innerText = `Cubes: ${cubesRendered}`;
+        }
+
+        if (cubesRendered === numObjects) {
+          clearInterval(cubeInterval);
+
+          cubeRenderTime = Date.now();
+          timeToRenderComplete = cubeRenderTime - startCubeRenderTime;
+          document.getElementById('timeToRender').innerText = `Time to Render Cubes: ${timeToRenderComplete} ms`;
+
+          startFPSMeter(); // Start tracking FPS after cube rendering is complete
+        }
+      }, 10);  // Adjust this interval for smoother cube rendering
+    }
+
+    function startFPSMeter() {
       fpsMeter = new FPSMeter();
       maxFPS = 0;
 
-      // Record test start time and begin animation loop
       testStartTime = Date.now();
       testRunning = true;
-      animate();
+      animate();  // Start the animation loop
     }
 
     function createSmoke() {
@@ -190,7 +217,7 @@
 
       requestAnimationFrame(animate);
 
-      // Rotate each cube
+      // Rotate the cubes
       cubes.forEach(cube => {
         cube.rotation.x += 0.01;
         cube.rotation.y += 0.01;
@@ -199,12 +226,12 @@
       // Render the scene
       renderer.render(scene, camera);
 
-      // Calculate and display FPS
+      // Calculate real-time FPS
       const fps = fpsMeter.getFPS();
       document.getElementById('fpsDisplay').innerText = 'FPS: ' + fps;
       if (fps > maxFPS) maxFPS = fps;
 
-      // Check if test duration has passed
+      // Check if 60 seconds have passed since cube rendering completion
       if (Date.now() - testStartTime >= testDuration) {
         endTest();
       }
@@ -212,7 +239,30 @@
 
     function endTest() {
       testRunning = false;
-      document.getElementById('result').innerText = 'Test Complete. Highest FPS: ' + maxFPS;
+      document.getElementById('result').innerText = `Test Finished! Highest FPS: ${maxFPS}`;
+    }
+
+    // FPSMeter class
+    class FPSMeter {
+      constructor() {
+        this.lastTime = performance.now();
+        this.frames = 0;
+        this.fps = 0;
+      }
+
+      getFPS() {
+        const now = performance.now();
+        const delta = now - this.lastTime;
+
+        if (delta >= 1000) {
+          this.fps = Math.round((this.frames / delta) * 1000);
+          this.frames = 0;
+          this.lastTime = now;
+        }
+
+        this.frames++;
+        return this.fps;
+      }
     }
   </script>
 </body>
