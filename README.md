@@ -32,17 +32,34 @@
       padding: 10px;
       font-size: 16px;
     }
+
+    .options {
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="info">
     <h1>Test Your Device Performance</h1>
-    <label for="device">Select your device:</label>
-    <select id="device">
-      <option value="pc">PC</option>
-      <option value="laptop">Laptop</option>
-      <option value="phone">Phone</option>
-    </select>
+    
+    <div class="options">
+      <label for="device">Select your device:</label>
+      <select id="device">
+        <option value="pc">PC</option>
+        <option value="laptop">Laptop</option>
+        <option value="phone">Phone</option>
+      </select>
+    </div>
+    
+    <div class="options">
+      <label for="complexity">Select rendering complexity:</label>
+      <select id="complexity">
+        <option value="easy">Easy (Low number of objects)</option>
+        <option value="medium">Medium (Moderate number of objects)</option>
+        <option value="hard">Hard (High number of objects)</option>
+      </select>
+    </div>
+    
     <button id="startBtn">Start Test</button>
     <p id="fpsDisplay">FPS: 0</p>
   </div>
@@ -52,15 +69,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="js/fpsMeter.js"></script>
   <script>
-    let scene, camera, renderer, cube;
+    let scene, camera, renderer;
+    let cubes = [];
     let fpsMeter;
     
     document.getElementById('startBtn').addEventListener('click', function() {
       const device = document.getElementById('device').value;
-      startTest(device);
+      const complexity = document.getElementById('complexity').value;
+      startTest(device, complexity);
     });
 
-    function startTest(device) {
+    function startTest(device, complexity) {
+      // Clear the scene if already running
+      if (scene) {
+        cubes.forEach(cube => scene.remove(cube));
+        cubes = [];
+      }
+
       // Create the scene
       scene = new THREE.Scene();
       const canvas = document.getElementById('testCanvas');
@@ -79,13 +104,31 @@
       renderer = new THREE.WebGLRenderer({ canvas });
       renderer.setSize(window.innerWidth / 1.5, window.innerHeight / 1.5);
       
-      // Create a cube
-      const geometry = new THREE.BoxGeometry();
-      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-      cube = new THREE.Mesh(geometry, material);
-      scene.add(cube);
+      // Create cubes based on complexity
+      let numObjects;
+      if (complexity === 'easy') {
+        numObjects = 50;
+      } else if (complexity === 'medium') {
+        numObjects = 200;
+      } else {
+        numObjects = 500;
+      }
 
-      camera.position.z = 5;
+      // Generate random cubes
+      for (let i = 0; i < numObjects; i++) {
+        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+        const cube = new THREE.Mesh(geometry, material);
+
+        cube.position.x = (Math.random() - 0.5) * 20;
+        cube.position.y = (Math.random() - 0.5) * 20;
+        cube.position.z = (Math.random() - 0.5) * 20;
+
+        scene.add(cube);
+        cubes.push(cube);
+      }
+
+      camera.position.z = 10;
 
       // Initialize FPS meter
       fpsMeter = new FPSMeter();
@@ -97,9 +140,11 @@
     function animate() {
       requestAnimationFrame(animate);
 
-      // Rotate the cube
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
+      // Rotate each cube
+      cubes.forEach(cube => {
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
+      });
 
       // Render the scene
       renderer.render(scene, camera);
