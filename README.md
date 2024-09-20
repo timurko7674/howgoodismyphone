@@ -5,227 +5,140 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Device Performance Test</title>
   <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
+    body {
       font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    canvas {
-      display: block;
-      margin-top: 20px;
-      background-color: #333;
-    }
-
-    .info {
-      margin-bottom: 10px;
       text-align: center;
+      padding: 20px;
     }
 
-    select, button, input {
-      padding: 10px;
-      font-size: 16px;
-    }
-
-    .options {
-      margin-bottom: 10px;
-    }
-
-    #customSettings, #warnings {
-      display: none;
-      margin-top: 10px;
+    #result, #fpsDisplay, #cubeCountDisplay, #timeToRender {
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <div class="info">
-    <h1>Test Your Device Performance</h1>
-
-    <div class="options">
-      <label for="device">Select your device:</label>
-      <select id="device">
-        <option value="pc">PC</option>
-        <option value="laptop">Laptop</option>
-        <option value="phone">Phone</option>
-      </select>
-    </div>
-
-    <div class="options">
-      <label for="complexity">Select rendering complexity:</label>
-      <select id="complexity">
-        <option value="easy">Easy (Low number of objects)</option>
-        <option value="medium">Medium (Moderate number of objects)</option>
-        <option value="hard">Hard (High number of objects)</option>
-        <option value="superhard">Super Hard (Massive number of objects)</option>
-        <option value="custom">Custom (Define your own settings)</option>
-      </select>
-    </div>
-
-    <div id="customSettings">
-      <h3>Custom Settings:</h3>
-
-      <div>
-        <input type="checkbox" id="cubeCheckbox"> Render Cubes
-        <label for="customCubes">Number of cubes:</label>
-        <input type="number" id="customCubes" min="0" value="0">
-      </div>
-
-      <div>
-        <input type="checkbox" id="smokeCheckbox"> Render Smoke
-        <label for="customSmoke">Number of smoke particles:</label>
-        <input type="number" id="customSmoke" min="0" value="0">
-      </div>
-
-      <label for="customTime">Test duration (minimum 10 seconds):</label>
-      <input type="number" id="customTime" min="10" value="10">
-    </div>
-
-    <button id="startBtn">Start Test</button>
-    <p id="cubeCountDisplay">Cubes: 0</p>
-    <p id="fpsDisplay">FPS: 0</p>
-    <p id="result" style="font-weight: bold;"></p>
-    <p id="timeToRender">Time to Render Cubes: 0 ms</p>
-
-    <div id="warnings" style="color: red;">Please pick at least one valid option (cubes or smoke) and set the amount to be greater than 0.</div>
+  <h1>Rendering Performance Test</h1>
+  
+  <div id="settings">
+    <label>Select Device Type:</label>
+    <select id="deviceType">
+      <option value="phone">Phone</option>
+      <option value="laptop">Laptop</option>
+      <option value="pc">PC</option>
+      <option value="tablet">Tablet</option>
+    </select>
   </div>
 
-  <canvas id="testCanvas"></canvas>
+  <div>
+    <label>Render Complexity:</label>
+    <select id="complexity">
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+      <option value="superHard">Super Hard (Custom)</option>
+    </select>
+  </div>
+
+  <div>
+    <label>Number of Cubes:</label>
+    <input type="number" id="cubeCount" min="0" value="0">
+  </div>
+
+  <div>
+    <label>Number of Smoke Particles:</label>
+    <input type="number" id="smokeCount" min="0" value="0">
+  </div>
+
+  <button onclick="startTest()">Start Test</button>
+
+  <div id="cubeCountDisplay">Cubes: 0</div>
+  <div id="fpsDisplay">FPS: 0</div>
+  <div id="timeToRender">Time to Render Cubes: 0 ms</div>
+  <div id="result"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
   <script>
-    let scene, camera, renderer;
+    let renderer, scene, camera;
+    let maxFPS = 0;
     let cubes = [];
     let smokeParticles = [];
-    let fpsMeter, maxFPS = 0;
-    let testDuration = 60000; // 60 seconds by default
-    let cubeRenderTime, testStartTime, timeToRenderComplete = 0;
-    let testRunning = false, cubesRendered = 0;
-    let startCubeRenderTime;
+    let cubesRendered = 0;
+    let testRunning = false;
+    let testStartTime, startCubeRenderTime;
+    const testDuration = 60000; // Run test for 60 seconds
+    let fpsMeter, cubeRenderTime;
 
-    document.getElementById('complexity').addEventListener('change', function() {
-      const complexity = document.getElementById('complexity').value;
-      document.getElementById('customSettings').style.display = (complexity === 'custom') ? 'block' : 'none';
-    });
+    // Initialize the 3D scene
+    function init() {
+      const canvas = document.createElement('canvas');
+      document.body.appendChild(canvas);
+      renderer = new THREE.WebGLRenderer({ antialias: true, canvas });
+      renderer.setSize(window.innerWidth, window.innerHeight);
 
-    document.getElementById('startBtn').addEventListener('click', function() {
-      const device = document.getElementById('device').value;
-      const complexity = document.getElementById('complexity').value;
-      const customCubes = parseInt(document.getElementById('customCubes').value, 10);
-      const customSmoke = parseInt(document.getElementById('customSmoke').value, 10);
-      const customTime = Math.max(parseInt(document.getElementById('customTime').value, 10), 10); // Ensure minimum of 10 seconds
-      const cubeChecked = document.getElementById('cubeCheckbox').checked;
-      const smokeChecked = document.getElementById('smokeCheckbox').checked;
-
-      // Validate the user input
-      if (complexity === 'custom' && (!cubeChecked && !smokeChecked)) {
-        document.getElementById('warnings').style.display = 'block';
-        return;
-      }
-
-      if (complexity === 'custom' && ((cubeChecked && customCubes === 0) || (smokeChecked && customSmoke === 0))) {
-        document.getElementById('warnings').style.display = 'block';
-        return;
-      }
-
-      document.getElementById('warnings').style.display = 'none';
-
-      testDuration = customTime * 1000; // Set custom time duration in ms
-
-      startTest(device, complexity, customCubes, customSmoke, cubeChecked, smokeChecked);
-    });
-
-    function startTest(device, complexity, customCubes, customSmoke, cubeChecked, smokeChecked) {
-      // Clear previous scene and cubes
-      if (scene) {
-        cubes.forEach(cube => scene.remove(cube));
-        smokeParticles.forEach(smoke => scene.remove(smoke));
-        cubes = [];
-        smokeParticles = [];
-      }
-
-      document.getElementById('result').innerText = '';
-      document.getElementById('cubeCountDisplay').innerText = 'Cubes: 0';
-      document.getElementById('fpsDisplay').innerText = 'FPS: 0';
-      document.getElementById('timeToRender').innerText = '';
-
-      cubesRendered = 0;
-
-      // Create the scene
       scene = new THREE.Scene();
-      const canvas = document.getElementById('testCanvas');
-
-      // Camera setup based on device type
-      let aspect = window.innerWidth / window.innerHeight;
-      if (device === 'phone') {
-        camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-      } else if (device === 'laptop') {
-        camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-      } else {
-        camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
-      }
-
-      // Renderer setup
-      renderer = new THREE.WebGLRenderer({ canvas });
-      renderer.setSize(window.innerWidth / 1.5, window.innerHeight / 1.5);
-
-      let numCubes = 0, numSmoke = 0;
-
-      // Select number of objects based on complexity
-      if (complexity === 'easy') {
-        numCubes = 50;
-      } else if (complexity === 'medium') {
-        numCubes = 200;
-      } else if (complexity === 'hard') {
-        numCubes = 500;
-      } else if (complexity === 'superhard') {
-        numCubes = 1000;
-        numSmoke = 500;
-      } else if (complexity === 'custom') {
-        if (cubeChecked) {
-          numCubes = customCubes;
-        }
-        if (smokeChecked) {
-          numSmoke = customSmoke;
-        }
-      }
-
-      startCubeRenderTime = Date.now();
-
-      // Generate cubes
-      generateCubes(numCubes, complexity);
-      if (numSmoke > 0) createSmoke(numSmoke);  // Add smoke if selected
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 5;
     }
 
-    function generateCubes(numCubes, complexity) {
-      const cubeInterval = setInterval(() => {
+    function getDeviceType() {
+      return document.getElementById('deviceType').value;
+    }
+
+    function startTest() {
+      const deviceType = getDeviceType();
+      const complexity = document.getElementById('complexity').value;
+      const numCubes = parseInt(document.getElementById('cubeCount').value);
+      const numSmoke = parseInt(document.getElementById('smokeCount').value);
+
+      if (isNaN(numCubes) || numCubes <= 0 || isNaN(numSmoke) || numSmoke <= 0) {
+        alert("Please enter valid values for cubes and smoke particles.");
+        return;
+      }
+
+      resetTest();
+      createCubes(numCubes);
+      createSmoke(numSmoke);
+
+      let waitTime = (complexity === "superHard") ? Math.max(10000, numCubes * 5) : 10000; // Wait based on complexity or custom inputs
+      setTimeout(startFPSMeter, waitTime); // Wait before starting FPS test
+    }
+
+    function resetTest() {
+      // Clear the scene
+      while (scene.children.length > 0) {
+        scene.remove(scene.children[0]);
+      }
+      cubes = [];
+      smokeParticles = [];
+      cubesRendered = 0;
+      maxFPS = 0;
+      testRunning = false;
+      document.getElementById('cubeCountDisplay').innerText = 'Cubes: 0';
+      document.getElementById('fpsDisplay').innerText = 'FPS: 0';
+      document.getElementById('timeToRender').innerText = 'Time to Render Cubes: 0 ms';
+      document.getElementById('result').innerText = '';
+    }
+
+    function createCubes(numCubes) {
+      startCubeRenderTime = Date.now();
+      let cubeInterval = setInterval(() => {
         if (cubesRendered < numCubes) {
-          // Create one cube at a time
-          const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+          const geometry = new THREE.BoxGeometry();
           const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
           const cube = new THREE.Mesh(geometry, material);
           cube.position.x = (Math.random() - 0.5) * 10;
           cube.position.y = (Math.random() - 0.5) * 10;
           cube.position.z = (Math.random() - 0.5) * 10;
+          cube.rotationSpeed = Math.random() * 0.05 + 0.01;
           scene.add(cube);
           cubes.push(cube);
-
-          // Spinning effect
-          cube.rotationSpeed = Math.random() * 0.05 + 0.01;
           cubesRendered++;
-
-          // Update the UI
           document.getElementById('cubeCountDisplay').innerText = `Cubes: ${cubesRendered}`;
         } else {
           clearInterval(cubeInterval);
           cubeRenderTime = Date.now() - startCubeRenderTime;
           document.getElementById('timeToRender').innerText = `Time to Render Cubes: ${cubeRenderTime} ms`;
-          setTimeout(startFPSMeter, 10000); // Wait for 10 seconds before starting the FPS test
         }
       }, 10);
     }
@@ -245,9 +158,8 @@
 
     function startFPSMeter() {
       testRunning = true;
-      fpsMeter = new FPSMeter();
+      fpsMeter = new FPSMeter(getDeviceType());
       testStartTime = Date.now();
-
       renderer.setAnimationLoop(() => {
         if (testRunning) {
           renderScene();
@@ -257,7 +169,6 @@
             maxFPS = fps;
           }
           document.getElementById('fpsDisplay').innerText = `FPS: ${fps}`;
-
           if (Date.now() - testStartTime >= testDuration) {
             endTest();
           }
@@ -281,12 +192,12 @@
       document.getElementById('result').innerText = `Test Finished! Highest FPS: ${maxFPS}`;
     }
 
-    // FPSMeter class
     class FPSMeter {
-      constructor() {
+      constructor(deviceType) {
         this.lastTime = performance.now();
         this.frames = 0;
         this.fps = 0;
+        this.deviceType = deviceType;
       }
 
       getFPS() {
@@ -299,10 +210,17 @@
           this.lastTime = now;
         }
 
+        if (this.deviceType === 'tablet') {
+          return Math.round(this.fps * 0.8); // FPS smoothing for tablets
+        }
         this.frames++;
         return this.fps;
       }
     }
+
+    // Initialize the scene
+    init();
+
   </script>
 </body>
 </html>
